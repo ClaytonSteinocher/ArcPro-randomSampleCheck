@@ -13,51 +13,39 @@ import numpy.random
 def getRandomValue():
     return numpy.random.random()
 
-
-# Getting our map from ArcMap to use
-currentMap = arcpy.mapping.MapDocument("CURRENT")
-
-# Getting active data frame from map
-df = arcpy.mapping.ListDataFrames(currentMap)[0]
-
-# Selecting first selected layer as feature layer
-# since cannot do user popup window to request raw_input in ArcMap software
-layers = [layer for layer in arcpy.mapping.ListLayers(currentMap, "", df) if layer.isFeatureLayer]
-selected_layer = layers[0]
-feature_class = selected_layer.dataSource
-
 # We are reading from table layer (total) and then using that as our check for defining sample_size
-def calculateSampleSize():
-   if 1 <= layer <= 8:
+def calculateSampleSize(feature_class):
+   if 1 <= feature_class <= 8:
        sample_size = 2
-   elif 9<= layer <= 15:
+   elif 9<= feature_class <= 15:
        sample_size = 3
-   elif 16<= layer <= 25:
+   elif 16<= feature_class <= 25:
        sample_size = 5
-   elif 26<= layer <= 50:
+   elif 26<= feature_class <= 50:
        sample_size = 8
-   elif 51<= layer <=90:
+   elif 51<= feature_class <=90:
        sample_size = 13
-   elif 91<= layer <= 150:
+   elif 91<= feature_class <= 150:
        sample_size = 20
-   elif 151<= layer <= 280:
+   elif 151<= feature_class <= 280:
        sample_size = 32
-   elif 281<= layer <=500:
+   elif 281<= feature_class <=500:
        sample_size = 50
-   elif 501<= layer <=1200:
+   elif 501<= feature_class <=1200:
        sample_size = 80
-   elif 1201<= layer <=3200:
+   elif 1201<= feature_class <=3200:
        sample_size = 125
-   elif 3201<= layer <= 10000:
+   elif 3201<= feature_class <= 10000:
        sample_size = 200
-   elif 10001 <= layer <= 35000:
+   elif 10001 <= feature_class <= 35000:
        sample_size = 315
-   elif 35001 <= layer <= 150000:
+   elif 35001 <= feature_class <= 150000:
        sample_size = 500
    else:
        sample_size = 800
    return sample_size
 
+# The idea is we're going to create a new field to fill just one row to let user know how max number that can be rejected from sample
 def rejectionNumber(sample_size):
     if 1<= sample_size <= 3:
         rejection_number = 1
@@ -72,7 +60,17 @@ def rejectionNumber(sample_size):
     elif 51<= sample_size <= 80:
         rejection_number = 8
 
-    # Main formula below after fetching acceptance and quality level of our table's sample size
+# Getting our map from ArcMap to use
+currentMap = arcpy.mapping.MapDocument("CURRENT")
+
+# Getting active data frame from map
+df = arcpy.mapping.ListDataFrames(currentMap)[0]
+
+# Selecting first selected layer as feature layer
+# since cannot do user popup window to request raw_input in ArcMap software
+layers = [layer for layer in arcpy.mapping.ListLayers(currentMap, "", df) if layer.isFeatureLayer]
+selected_layer = layers[0]
+feature_class = selected_layer.dataSource
 
 
 # Delete random_value field if already exists - this is also needed for rerunning script and creating new random samples
@@ -84,12 +82,26 @@ if "random_value" in field_names:
 # FLOAT IS A MUST FOR DECIMALS
 arcpy.AddField_management(feature_class, "random_value", "FLOAT")
 
+# Getting the number of rows in our feature class so that calculateSampleSize function can run that total through and take a sample
+feature_rows = int(arcpy.GetCount_management(feature_class).getOutput(0))
+sample_size = calculateSampleSize(feature_rows)
 
-# In each row, update the newly created random_value field_name by using a list on row and calling our function on all rows
-with arcpy.da.UpdateCursor(feature_class, ["random_value"]) as cursor:
-    for row in cursor:
-        row[0] = getRandomValue()
+# Moving away from direct indexing to row.setValue instead since older version of Python
+cursor = arcpy.UpdateCursor(feature_class)
+count = 0
+for row in cursor:
+    if count < sample_size:
+        # Setting the field random_value using getRandomValue function
+        row.setValue("random_value", getRandomValue())
+        # Updating each row one by one and add 1 to count after each row modified
         cursor.updateRow(row)
+        count += 1
+    else:
+        break
+# Deleting cursor afterwards to avoid locks or errors
+del cursor
+
+# Print actually does work at least if run from terminal - TODO: Figure out if possible to popup terminal then if run from toolbox
 print("Random values have been assigned to the 'random_value field in the %s layer." % selected_layer.name)
 
 
