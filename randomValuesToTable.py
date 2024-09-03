@@ -73,44 +73,58 @@ currentMap = arcpy.mapping.MapDocument("CURRENT")
 # Getting active data frame from map
 df = arcpy.mapping.ListDataFrames(currentMap)[0]
 
-# Selecting first selected layer as feature layer
-# since cannot do user popup window to request raw_input in ArcMap software
+# Putting all feature layers in the active data frame into an accessible list
 layers = [layer for layer in arcpy.mapping.ListLayers(currentMap, "", df) if layer.isFeatureLayer]
-selected_layer = layers[0]
-feature_class = selected_layer.dataSource
+
+# BY DEFAULT, selected_layer will be top layer in index, but let's have user
+# define this in console before running script as a makeshift way of a popup window (why is this not a thing in arcmap btw....)
+# This is defaulting to first layer in index
+selected_layer = 0
+
+# Try and except required to use default versus user defining the selection beforehand
+try:
+    selected_layer
+except NameError:
+    # Defaulting back to 0 if no user input before script ran
+    selected_layer = 0
+
+if 0 <= selected_layer < len(layers):
+    layer_index = layers[selected_layer]
+    feature_class = layer_index.dataSource
 
 
-# Delete random_value field if already exists - this is also needed for rerunning script and creating new random samples
-field_names = [field.name for field in arcpy.ListFields(feature_class)]
-if "random_value" in field_names:
-    arcpy.DeleteField_management(feature_class, "random_value")
+    # Delete random_value field if already exists - this is also needed for rerunning script and creating new random samples
+    field_names = [field.name for field in arcpy.ListFields(feature_class)]
+    if "random_value" in field_names:
+        arcpy.DeleteField_management(feature_class, "random_value")
 
-# Creating the new field using AddField_management tool - accessing our layer to modify attribute table.
-# FLOAT IS A MUST FOR DECIMALS
-arcpy.AddField_management(feature_class, "random_value", "FLOAT")
+    # Creating the new field using AddField_management tool - accessing our layer to modify attribute table.
+    # FLOAT IS A MUST FOR DECIMALS
+    arcpy.AddField_management(feature_class, "random_value", "FLOAT")
 
-# Getting the number of rows in our feature class so that calculateSampleSize function can run that total through and take a sample
-feature_rows = int(arcpy.GetCount_management(feature_class).getOutput(0))
-sample_size = calculateSampleSize(feature_rows)
+    # Getting the number of rows in our feature class so that calculateSampleSize function can run that total through and take a sample
+    feature_rows = int(arcpy.GetCount_management(feature_class).getOutput(0))
+    sample_size = calculateSampleSize(feature_rows)
 
-# Moving away from direct indexing to row.setValue instead since older version of Python
-cursor = arcpy.UpdateCursor(feature_class)
-count = 0
-for row in cursor:
-    if count < sample_size:
-        # Setting the field random_value using getRandomValue function
-        row.setValue("random_value", getRandomValue())
-        # Updating each row one by one and add 1 to count after each row modified
-        cursor.updateRow(row)
-        count += 1
-    else:
-        break
-# Deleting cursor afterwards to avoid locks or errors
-del cursor
+    # Moving away from direct indexing to row.setValue instead since older version of Python
+    cursor = arcpy.UpdateCursor(feature_class)
+    count = 0
+    for row in cursor:
+        if count < sample_size:
+            # Setting the field random_value using getRandomValue function
+            row.setValue("random_value", getRandomValue())
+            # Updating each row one by one and add 1 to count after each row modified
+            cursor.updateRow(row)
+            count += 1
+        else:
+            break
+    # Deleting cursor afterwards to avoid locks or errors
+    del cursor
 
-# Print actually does work at least if run from terminal - TODO: Figure out if possible to popup terminal then if run from toolbox
-print("Random values have been assigned to the 'random_value field in the %s layer." % selected_layer.name)
-
+    # Print actually does work at least if run from terminal - TODO: let's see if we can popup from toolbox eventually too
+    print("Random values have been assigned to the 'random_value' field in the %s layer." % selected_layer.name)
+else:
+    print("Invalid layer selection. Please choose a valid index. Remember that 0 would equal first layer.")
 rejection_printout = rejectionNumber(sample_size)
 # Printing rejection number as well based on sample size to complete save any need to reference that excel sheet
 print("Out of your sample size in this random_sample field, you have a rejection number of: " + str(rejection_printout))
