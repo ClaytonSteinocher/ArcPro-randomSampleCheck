@@ -45,20 +45,27 @@ def calculateSampleSize(feature_class):
        sample_size = 800
    return sample_size
 
-# The idea is we're going to create a new field to fill just one row to let user know how max number that can be rejected from sample
+# Defining rejection number to print to console at end
 def rejectionNumber(sample_size):
-    if 1<= sample_size <= 3:
+    if 1<= sample_size <= 4:
         rejection_number = 1
-    elif 4<= sample_size <= 13:
+    elif 5<= sample_size <= 19:
         rejection_number = 2
-    elif 14<= sample_size <=20:
+    elif 20<= sample_size <=31:
         rejection_number = 3
-    elif 21<= sample_size <=32:
+    elif 32<= sample_size <=49:
         rejection_number = 4
-    elif 33<= sample_size <= 50:
+    elif 50<= sample_size <= 79:
         rejection_number = 6
-    elif 51<= sample_size <= 80:
+    elif 80<= sample_size <= 124:
         rejection_number = 8
+    elif 125<= sample_size <= 199:
+        rejection_number = 11
+    elif 200<= sample_size <= 314:
+        rejection_number = 15
+    else:
+        rejection_number = 22
+    return rejection_number
 
 # Getting our map from ArcMap to use
 currentMap = arcpy.mapping.MapDocument("CURRENT")
@@ -103,6 +110,11 @@ del cursor
 
 # Print actually does work at least if run from terminal - TODO: Figure out if possible to popup terminal then if run from toolbox
 print("Random values have been assigned to the 'random_value field in the %s layer." % selected_layer.name)
+
+rejection_printout = rejectionNumber(sample_size)
+# Printing rejection number as well based on sample size to complete save any need to reference that excel sheet
+print("Out of your sample size in this random_sample field, you have a rejection number of: " + str(rejection_printout))
+
 
 
 
