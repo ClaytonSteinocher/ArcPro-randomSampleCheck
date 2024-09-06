@@ -88,6 +88,8 @@ except NameError:
     # Defaulting back to 0 if no user input before script ran
     selected_layer = 0
 
+    # Define selected_layer in console before running for what layer in inde
+    # Such as 'selected_layer = 8'
 if 0 <= selected_layer < len(layers):
     layer_index = layers[selected_layer]
     feature_class = layer_index.dataSource
