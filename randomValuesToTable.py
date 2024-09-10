@@ -1,13 +1,13 @@
 import arcpy
 import numpy as np
 import numpy.random
+import tkinter as tk
+from tkinter import simpledialog
 
-# # USING FILE PATHING
-# arcpy.env.workspace = "H:\Services\Service Jobs Open\Imaging Services\23-1 - City of Toronto - 2023\Assets\30_QC\Etobicoke Centre\TORONTO_2023_Etobicoke_Centre_From_DCIL_13_Aug_2024.gdb"
-# # This is just pointing to the actual table
-# feature_class = "\Road_Paint_Point_CS_20240827"
-# # Creating this new field to a variable to use in getRandomValue function
-# field_name = "random_value"
+# Initialize Tkinter for popup
+root = tk.Tk()
+# Hide the main window
+root.withdraw()
 
 # Definining the main agent in this script our getRandomValue function
 def getRandomValue():
@@ -67,72 +67,58 @@ def rejectionNumber(sample_size):
         rejection_number = 22
     return rejection_number
 
-# Getting our map from ArcMap to use
-currentMap = arcpy.mapping.MapDocument("CURRENT")
+# Ideally popup happens here asking for user to select Layer
+selected_layer_index = simpledialog.askinteger("Layer Selection", "Enter the layer index (0-based):")
 
-# Getting active data frame from map
-df = arcpy.mapping.ListDataFrames(currentMap)[0]
+# Getting current project map from ArcGIS Pro
+aprx = arcpy.mp.ArcGISProject("CURRENT")
+# Assuming first map
+map_view = aprx.listMaps()[0]
 
-# Putting all feature layers in the active data frame into an accessible list
-layers = [layer for layer in arcpy.mapping.ListLayers(currentMap, "", df) if layer.isFeatureLayer]
+# Putting all feature layers from the map into an accessible list
+layers = [layer for layer in map_view.listLayers() if layer.isFeatureLayer]
 
-# BY DEFAULT, selected_layer will be top layer in index, but let's have user
-# define this in console before running script as a makeshift way of a popup window (why is this not a thing in arcmap btw....)
-# This is defaulting to first layer in index
-selected_layer = 0
+# Checking if the selected layer index is valid
+if 0 <= selected_layer_index < len(layers):
+    selected_layer = layers[selected_layer_index]
+    feature_class = selected_layer.dataSource
 
-# Try and except required to use default versus user defining the selection beforehand
-try:
-    selected_layer
-except NameError:
-    # Defaulting back to 0 if no user input before script ran
-    selected_layer = 0
-
-    # Define selected_layer in console before running for what layer in inde
-    # Such as 'selected_layer = 8'
-if 0 <= selected_layer < len(layers):
-    layer_index = layers[selected_layer]
-    feature_class = layer_index.dataSource
-
-
-    # Delete random_value field if already exists - this is also needed for rerunning script and creating new random samples
+    # Deleting random_value field if it already exists to rerun script
     field_names = [field.name for field in arcpy.ListFields(feature_class)]
     if "random_value" in field_names:
         arcpy.DeleteField_management(feature_class, "random_value")
 
-    # Creating the new field using AddField_management tool - accessing our layer to modify attribute table.
-    # FLOAT IS A MUST FOR DECIMALS
+    # Creating the new field using AddField_management tool
+    # Accessing our feature_class layer to modify its attribute table
     arcpy.AddField_management(feature_class, "random_value", "FLOAT")
 
-    # Getting the number of rows in our feature class so that calculateSampleSize function can run that total through and take a sample
-    feature_rows = int(arcpy.GetCount_management(feature_class).getOutput(0))
-    sample_size = calculateSampleSize(feature_rows)
+    # Calculating the number of rows in our feature class
+    # So that calculateSampleSize function can run through and take only a sample
+    feature_count = int(arcpy.GetCount_management(feature_class).getOutput(0))
+    sample_size = calculateSampleSize(feature_count)
 
-    # Moving away from direct indexing to row.setValue instead since older version of Python
-    cursor = arcpy.UpdateCursor(feature_class)
-    count = 0
-    for row in cursor:
-        if count < sample_size:
-            # Setting the field random_value using getRandomValue function
-            row.setValue("random_value", getRandomValue())
-            # Updating each row one by one and add 1 to count after each row modified
-            cursor.updateRow(row)
-            count += 1
-        else:
-            break
-    # Deleting cursor afterwards to avoid locks or errors
-    del cursor
+    # Using direct indexing instead of count += 1 for updating cursor per row
+    # Since newer version of Python with ArcPro version
+    with arcpy.da.UpdateCursor(feature_class, ["random_value"]) as cursor:
+        count = 0
+        for row in cursor:
+            if count < sample_size:
+                # Setting the field random_value using getRandomValue function
+                row[0] = getRandomValue()
+                cursor.updateRow(row)
+                count += 1
+            else:
+                # Stop once sample_size is reached to avoid IterationError or infinite loop
+                break
 
-    # Print actually does work at least if run from terminal - TODO: let's see if we can popup from toolbox eventually too
-    print("Random values have been assigned to the 'random_value' field in the %s layer." % selected_layer.name)
+    ## Printing out not just the sample size just created, but also the rejection number for
+    # the user to stay aware of as they go through this random sample manually.
+    ## This way we can completely remove the need for that excel's sheet functionality.
+    rejection_number = rejectionNumber(sample_size)
+    print(f"Sample size: {sample_size}, Rejection number: {rejection_number}")
+    print(f"Random values assigned to {sample_size} rows in layer: {selected_layer.name}")
 else:
-    print("Invalid layer selection. Please choose a valid index. Remember that 0 would equal first layer.")
-rejection_printout = rejectionNumber(sample_size)
-# Printing rejection number as well based on sample size to complete save any need to reference that excel sheet
-print("Out of your sample size in this random_sample field, you have a rejection number of: " + str(rejection_printout))
+    print("Invalid layer index selected.")
 
-
-
-
-
-
+# Cleaning up Tkinter now
+root.destroy()
