@@ -15,32 +15,32 @@ def getRandomValue():
     return numpy.random.random()
 
 # We are reading from table layer (total) and then using that as our check for defining sample_size
-def calculateSampleSize(feature_class):
-   if 1 <= feature_class <= 8:
+def calculateSampleSize(feature_count):
+   if 1 <= feature_count <= 8:
        sample_size = 2
-   elif 9<= feature_class <= 15:
+   elif 9<= feature_count <= 15:
        sample_size = 3
-   elif 16<= feature_class <= 25:
+   elif 16<= feature_count <= 25:
        sample_size = 5
-   elif 26<= feature_class <= 50:
+   elif 26<= feature_count <= 50:
        sample_size = 8
-   elif 51<= feature_class <=90:
+   elif 51<= feature_count <=90:
        sample_size = 13
-   elif 91<= feature_class <= 150:
+   elif 91<= feature_count <= 150:
        sample_size = 20
-   elif 151<= feature_class <= 280:
+   elif 151<= feature_count <= 280:
        sample_size = 32
-   elif 281<= feature_class <=500:
+   elif 281<= feature_count <=500:
        sample_size = 50
-   elif 501<= feature_class <=1200:
+   elif 501<= feature_count <=1200:
        sample_size = 80
-   elif 1201<= feature_class <=3200:
+   elif 1201<= feature_count <=3200:
        sample_size = 125
-   elif 3201<= feature_class <= 10000:
+   elif 3201<= feature_count <= 10000:
        sample_size = 200
-   elif 10001 <= feature_class <= 35000:
+   elif 10001 <= feature_count <= 35000:
        sample_size = 315
-   elif 35001 <= feature_class <= 150000:
+   elif 35001 <= feature_count <= 150000:
        sample_size = 500
    else:
        sample_size = 800
@@ -98,28 +98,51 @@ if 0 <= selected_layer_index < len(layers):
     feature_count = int(arcpy.GetCount_management(feature_class).getOutput(0))
     sample_size = calculateSampleSize(feature_count)
 
-    # Using direct indexing instead of count += 1 for updating cursor per row
-    # Since newer version of Python with ArcPro version
-    with arcpy.da.UpdateCursor(feature_class, ["random_value"]) as cursor:
-        count = 0
-        for row in cursor:
-            if count < sample_size:
-                # Setting the field random_value using getRandomValue function
-                row[0] = getRandomValue()
-                cursor.updateRow(row)
-                count += 1
-            else:
-                # Stop once sample_size is reached to avoid IterationError or infinite loop
-                break
+   # This isnt using direct indexing - think we are still using ArcMap version base for this function. Worth digging into maybe later
+    def updateRows(feature_class, sample_size):
+        try:
+            with arcpy.da.UpdateCursor(feature_class, ["random_value"]) as cursor:
+                count = 0
+                for row in cursor:
+                    if count < sample_size:
+                        # Setting the field random_value using getRandomValue function
+                        row[0] = getRandomValue()
+                        cursor.updateRow(row)
+                        count += 1
+                    else:
+                        # Stop once sample_size is reached to avoid IterationError or infinite loop
+                        break
+        # Throwing error here if this is the problem card - i think maybe
+        except Exception as e:
+            messagebox.showerror("Update rows error", f"An error occured: {str(e)}")
+            raise e
+        # Clearing here too before printout in case its too late by when printout is closing out script
+        finally:
+            arcpy.ClearWorkspaceCache_management()
+            # Deleting cursor too maybe that is it
+            if cursor:
+                del  cursor
 
-    ## Using messagebox from tkinter to print out not just the sample size just created, but also the rejection number for
-    # the user to stay aware of as they go through this random sample manually.
-    ## This way we can completely remove the need for that excel's sheet functionality.
-    rejection_number = rejectionNumber(sample_size)
-    messagebox.showinfo("Success", f"Sample size: {sample_size}, Rejecton number :{rejection_number}\n"
-     f'Random values assigned to {sample_size} rows in layer: {selected_layer.name}')
+    # Calling function directly below it
+    updateRows(feature_class, sample_size)
+
+    # Creating printout function so that we can use e as Exception to help debug this better
+    def printout():
+        try:
+            rejection_number = rejectionNumber(sample_size)
+            # ## Using messagebox from tkinter to printout not just the sample size just created, but also the rejection number for
+            # # the user to stay aware of as they go through this random sample manually.
+            # ## This way we can completely remove the need for that excel's sheet functionality.
+            messagebox.showinfo("Success", f"Sample size: {sample_size}, Rejecton number :{rejection_number}\n"
+                                           f'Random values assigned to {sample_size} rows in layer: {selected_layer.name}')
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occured:  {str(e)}")
+        finally:
+            # Cleaning up Tkinter and the lock hopefully
+            arcpy.ClearWorkspaceCache_management()
+    # Let's make sure to call this or else no printout...lol
+    printout()
+    # Saving map object after final printout to release any save locks if that is it
+    aprx.save()
 else:
-    messagebox.showinfo("Error", "Invalid layer index selected.")
-
-# Cleaning up Tkinter now
-root.destroy()
+    messagebox.showerror("Error", "Invalid layer index selected.")
