@@ -1,3 +1,5 @@
+# Made by Clayton Steinocher - last updated 03/26/2025
+
 import arcpy
 import numpy as np
 import numpy.random
@@ -101,17 +103,25 @@ if 0 <= selected_layer_index < len(layers):
    # This isnt using direct indexing - think we are still using ArcMap version base for this function. Worth digging into maybe later
     def updateRows(feature_class, sample_size):
         try:
-            with arcpy.da.UpdateCursor(feature_class, ["random_value"]) as cursor:
-                count = 0
+            # Collecting all rows into memory
+            rows = []
+            with arcpy.da.UpdateCursor(feature_class, ["OID@", "random_value"]) as cursor:
                 for row in cursor:
-                    if count < sample_size:
-                        # Setting the field random_value using getRandomValue function
-                        row[0] = getRandomValue()
+                    # OID and value placeholder
+                    rows.append([row[0], row[1]])
+            # Shuffling the row list
+            np.random.shuffle(rows)
+
+            # Selecting the OIDS to update
+            sampled_oids = set([row[0] for row in rows[:sample_size]])
+
+            # Updating only the sampled rows
+            with arcpy.da.UpdateCursor(feature_class, ["OID@", "random_value"]) as cursor:
+                for row in cursor:
+                    if row[0] in sampled_oids:
+                        row[1] = getRandomValue()
                         cursor.updateRow(row)
-                        count += 1
-                    else:
-                        # Stop once sample_size is reached to avoid IterationError or infinite loop
-                        break
+
         # Throwing error here if this is the problem card - i think maybe
         except Exception as e:
             messagebox.showerror("Update rows error", f"An error occured: {str(e)}")
